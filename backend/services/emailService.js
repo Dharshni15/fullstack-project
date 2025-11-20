@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 
 class EmailService {
   constructor() {
-    this.provider = process.env.EMAIL_PROVIDER || 'sendgrid'; // 'sendgrid' or 'aws-ses'
+    this.provider = process.env.EMAIL_PROVIDER || 'development'; // 'development', 'sendgrid', or 'aws-ses'
     this.templatesDir = path.join(__dirname, '../templates/email');
     this.compiledTemplates = new Map();
     
@@ -19,9 +19,9 @@ class EmailService {
   }
 
   initializeProvider() {
-    // In development mode without API keys, just log
-    if (process.env.NODE_ENV === 'development' && !process.env.SENDGRID_API_KEY && !process.env.AWS_ACCESS_KEY_ID) {
-      console.log('🧪 Email service running in development mode - emails will be logged only');
+    // Development mode: always log, never initialize cloud providers
+    if (this.provider === 'development') {
+      console.log('🧪 Email service set to development mode - emails will be logged only');
       return;
     }
 
@@ -33,7 +33,7 @@ class EmailService {
         this.initializeAWSSES();
         break;
       default:
-        console.error('Invalid email provider. Use "sendgrid" or "aws-ses"');
+        console.error('Invalid email provider. Use "development", "sendgrid" or "aws-ses"');
     }
   }
 
@@ -231,7 +231,7 @@ class EmailService {
       };
 
       // Development mode - just log the email
-      if (process.env.NODE_ENV === 'development' && (!process.env.SENDGRID_API_KEY && !process.env.AWS_ACCESS_KEY_ID)) {
+      if (this.provider === 'development') {
         return await this.sendWithDevelopmentMode(emailData);
       }
 
@@ -246,6 +246,9 @@ class EmailService {
             throw new Error('Dynamic templates not supported with AWS SES. Use template parameter instead.');
           }
           result = await this.sendWithAWSSES(emailData);
+          break;
+        case 'development':
+          result = await this.sendWithDevelopmentMode(emailData);
           break;
         default:
           throw new Error('Invalid email provider configured');

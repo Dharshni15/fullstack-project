@@ -2,7 +2,7 @@ import { catchAsyncErrors } from "../middlewares/catchAsyncError.js";
 import ErrorHandler from "../middlewares/error.js";
 import { Application } from "../models/applicationSchema.js";
 import { Job } from "../models/jobSchema.js";
-import cloudinary from "cloudinary";
+import { uploadFileFromTemp } from "../utils/gridfs.js";
 
 export const postApplication = catchAsyncErrors(async (req, res, next) => {
   const { role } = req.user;
@@ -17,7 +17,7 @@ export const postApplication = catchAsyncErrors(async (req, res, next) => {
   }
 
   const { resume } = req.files;
-  const allowedFormats = ["image/png", "image/jpeg", "image/webp"];
+  const allowedFormats = ["image/png", "image/jpeg", "image/webp", "application/pdf"];
   if (!allowedFormats.includes(resume.mimetype)) {
     return next(
       new ErrorHandler("Invalid file type. Please upload a PNG, JPEG, or WEBP file.", 400)
@@ -25,18 +25,12 @@ export const postApplication = catchAsyncErrors(async (req, res, next) => {
   }
   
   try {
-    const cloudinaryResponse = await cloudinary.uploader.upload(
-      resume.tempFilePath
+    const fileId = await uploadFileFromTemp(
+      resume.tempFilePath,
+      resume.name,
+      resume.mimetype
     );
 
-    if (!cloudinaryResponse || cloudinaryResponse.error) {
-      console.error(
-        "Cloudinary Error:",
-        cloudinaryResponse.error || "Unknown Cloudinary error"
-      );
-      return next(new ErrorHandler("Failed to upload Resume to Cloudinary", 500));
-    }
-    
     const { name, email, coverLetter, phone, address, jobId } = req.body;
     const applicantID = {
       user: req.user._id,
@@ -79,8 +73,8 @@ export const postApplication = catchAsyncErrors(async (req, res, next) => {
       applicantID,
       employerID,
       resume: {
-        public_id: cloudinaryResponse.public_id,
-        url: cloudinaryResponse.secure_url,
+        public_id: fileId.toString(),
+        url: `${req.protocol}://${req.get('host')}/api/v1/files/${fileId.toString()}`,
       },
     });
     
@@ -90,13 +84,6 @@ export const postApplication = catchAsyncErrors(async (req, res, next) => {
       application,
     });
   } catch (error) {
-    // Handle Cloudinary specific errors
-    if (error.message && error.message.includes("api_key")) {
-      console.error("Cloudinary API key error:", error.message);
-      return next(new ErrorHandler("File upload service configuration error", 500));
-    }
-    
-    // Handle any other errors
     return next(error);
   }
 });

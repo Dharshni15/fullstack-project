@@ -11,6 +11,7 @@ import cors from "cors";
 import { errorMiddleware } from "./middlewares/error.js";
 import cookieParser from "cookie-parser";
 import fileUpload from "express-fileupload";
+import fileRouter from "./routes/fileRoutes.js";
 
 // Import email services
 import emailService from "./services/emailService.js";
@@ -42,6 +43,7 @@ app.use("/api/v1/application", applicationRouter);
 app.use("/api/v1/certificate", certificateRouter);
 app.use("/api/v1/message", messageRouter);
 app.use("/api/v1/email", emailRouter);
+app.use("/api/v1/files", fileRouter);
 
 // Health check endpoint
 app.get("/api/v1/health", (req, res) => {

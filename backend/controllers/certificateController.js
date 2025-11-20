@@ -1,7 +1,7 @@
 import { catchAsyncErrors } from "../middlewares/catchAsyncError.js";
 import { Certificate } from "../models/certificateSchema.js";
 import ErrorHandler from "../middlewares/error.js";
-import { v2 as cloudinary } from "cloudinary";
+import { uploadFileFromTemp, deleteFileById } from "../utils/gridfs.js";
 
 // Post a new certificate
 export const postCertificate = catchAsyncErrors(async (req, res, next) => {
@@ -44,23 +44,13 @@ export const postCertificate = catchAsyncErrors(async (req, res, next) => {
     return next(new ErrorHandler("Please provide complete certificate information!", 400));
   }
 
-  console.log("📤 Starting Cloudinary upload for:", certificate.tempFilePath);
-  const cloudinaryResponse = await cloudinary.uploader.upload(
+  console.log("📤 Starting upload to MongoDB GridFS:", certificate.tempFilePath);
+  const fileId = await uploadFileFromTemp(
     certificate.tempFilePath,
-    {
-      folder: "certificates",
-      resource_type: "auto"
-    }
+    certificate.name,
+    certificate.mimetype
   );
-  console.log("✅ Cloudinary upload response:", cloudinaryResponse);
-
-  if (!cloudinaryResponse || cloudinaryResponse.error) {
-    console.error(
-      "Cloudinary Error:",
-      cloudinaryResponse.error || "Unknown Cloudinary error"
-    );
-    return next(new ErrorHandler("Failed to upload certificate to Cloudinary", 500));
-  }
+  console.log("✅ Stored file in MongoDB GridFS:", fileId.toString());
 
   const skillsArray = skills ? skills.split(',').map(skill => skill.trim()) : [];
   console.log("📋 Skills array:", skillsArray);
@@ -73,8 +63,8 @@ export const postCertificate = catchAsyncErrors(async (req, res, next) => {
     issueDate,
     expiryDate: expiryDate || null,
     certificateUrl: {
-      public_id: cloudinaryResponse.public_id,
-      url: cloudinaryResponse.secure_url,
+      public_id: fileId.toString(),
+      url: `${req.protocol}://${req.get('host')}/api/v1/files/${fileId.toString()}`,
     },
     credentialId: credentialId || null,
     skills: skillsArray,
@@ -235,21 +225,19 @@ export const updateCertificate = catchAsyncErrors(async (req, res, next) => {
       );
     }
 
-    // Delete old image from cloudinary
-    await cloudinary.uploader.destroy(certificate.certificateUrl.public_id);
+    // Delete old file from storage
+    await deleteFileById(certificate.certificateUrl.public_id);
 
-    // Upload new image
-    const cloudinaryResponse = await cloudinary.uploader.upload(
+    // Upload new file to MongoDB GridFS
+    const newFileId = await uploadFileFromTemp(
       newCertFile.tempFilePath,
-      {
-        folder: "certificates",
-        resource_type: "auto"
-      }
+      newCertFile.name,
+      newCertFile.mimetype
     );
 
     updateData.certificateUrl = {
-      public_id: cloudinaryResponse.public_id,
-      url: cloudinaryResponse.secure_url,
+      public_id: newFileId.toString(),
+      url: `${req.protocol}://${req.get('host')}/api/v1/files/${newFileId.toString()}`,
     };
   }
 
@@ -286,8 +274,8 @@ export const deleteCertificate = catchAsyncErrors(async (req, res, next) => {
     return next(new ErrorHandler("Not authorized to delete this certificate.", 403));
   }
 
-  // Delete certificate from cloudinary
-  await cloudinary.uploader.destroy(certificate.certificateUrl.public_id);
+  // Delete certificate file from MongoDB GridFS
+  await deleteFileById(certificate.certificateUrl.public_id);
 
   await certificate.deleteOne();
 

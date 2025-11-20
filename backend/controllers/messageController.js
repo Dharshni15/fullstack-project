@@ -3,7 +3,7 @@ import { Message } from "../models/messageSchema.js";
 import { User } from "../models/userSchema.js";
 import { Certificate } from "../models/certificateSchema.js";
 import ErrorHandler from "../middlewares/error.js";
-import { v2 as cloudinary } from "cloudinary";
+import { uploadFileFromTemp, deleteFileById } from "../utils/gridfs.js";
 
 // Send a message
 export const sendMessage = catchAsyncErrors(async (req, res, next) => {
@@ -66,17 +66,15 @@ export const sendMessage = catchAsyncErrors(async (req, res, next) => {
         );
       }
       
-      const cloudinaryResponse = await cloudinary.uploader.upload(
+      const fileId = await uploadFileFromTemp(
         file.tempFilePath,
-        {
-          folder: "message_attachments",
-          resource_type: "auto"
-        }
+        file.name,
+        file.mimetype
       );
-      
+
       attachments.push({
-        public_id: cloudinaryResponse.public_id,
-        url: cloudinaryResponse.secure_url,
+        public_id: fileId.toString(),
+        url: `${req.protocol}://${req.get('host')}/api/v1/files/${fileId.toString()}`,
         filename: file.name
       });
     }
@@ -287,10 +285,10 @@ export const deleteMessage = catchAsyncErrors(async (req, res, next) => {
     return next(new ErrorHandler("Not authorized to delete this message!", 403));
   }
 
-  // Delete attachments from cloudinary if any
+  // Delete attachments from MongoDB GridFS if any
   if (message.attachments && message.attachments.length > 0) {
     for (const attachment of message.attachments) {
-      await cloudinary.uploader.destroy(attachment.public_id);
+      await deleteFileById(attachment.public_id);
     }
   }
 

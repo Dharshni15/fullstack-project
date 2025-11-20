@@ -19,20 +19,32 @@ const PostJob = () => {
 
   const handleJobPost = async (e) => {
     e.preventDefault();
-    if (salaryType === "Fixed Salary") {
-      setSalaryFrom("");
-      setSalaryFrom("");
-    } else if (salaryType === "Ranged Salary") {
-      setFixedSalary("");
-    } else {
-      setSalaryFrom("");
-      setSalaryTo("");
-      setFixedSalary("");
+    
+    // Form validation
+    if (!title || !description || !category || !country || !city || !location || salaryType === "default") {
+      toast.error("Please fill all required fields");
+      return;
     }
-    await axios
-      .post(
-        "http://localhost:4000/api/v1/job/post",
-        fixedSalary.length >= 4
+    
+    if (salaryType === "Fixed Salary" && !fixedSalary) {
+      toast.error("Please enter fixed salary");
+      return;
+    }
+    
+    if (salaryType === "Ranged Salary" && (!salaryFrom || !salaryTo)) {
+      toast.error("Please enter salary range");
+      return;
+    }
+    
+    if (salaryType === "Ranged Salary" && parseInt(salaryFrom) >= parseInt(salaryTo)) {
+      toast.error("Salary 'From' should be less than 'To'");
+      return;
+    }
+    
+    try {
+      const response = await axios.post(
+        "http://localhost:4001/api/v1/job/post",
+        salaryType === "Fixed Salary"
           ? {
               title,
               description,
@@ -40,7 +52,7 @@ const PostJob = () => {
               country,
               city,
               location,
-              fixedSalary,
+              fixedSalary: parseInt(fixedSalary),
             }
           : {
               title,
@@ -49,8 +61,8 @@ const PostJob = () => {
               country,
               city,
               location,
-              salaryFrom,
-              salaryTo,
+              salaryFrom: parseInt(salaryFrom),
+              salaryTo: parseInt(salaryTo),
             },
         {
           withCredentials: true,
@@ -58,13 +70,29 @@ const PostJob = () => {
             "Content-Type": "application/json",
           },
         }
-      )
-      .then((res) => {
-        toast.success(res.data.message);
-      })
-      .catch((err) => {
-        toast.error(err.response.data.message);
-      });
+      );
+      
+      toast.success(response.data.message);
+      
+      // Clear form after successful submission
+      setTitle("");
+      setDescription("");
+      setCategory("");
+      setCountry("");
+      setCity("");
+      setLocation("");
+      setSalaryFrom("");
+      setSalaryTo("");
+      setFixedSalary("");
+      setSalaryType("default");
+      
+      // Navigate to posted jobs page
+      navigateTo("/job/me");
+      
+    } catch (error) {
+      console.error("Error posting job:", error);
+      toast.error(error.response?.data?.message || "Failed to post job. Please try again.");
+    }
   };
 
   const navigateTo = useNavigate();
@@ -133,7 +161,7 @@ const PostJob = () => {
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               placeholder="Location"
-            />
+/>
             <div className="salary_wrapper">
               <select
                 value={salaryType}
